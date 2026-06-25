@@ -465,20 +465,24 @@
   </script>
 
   <script>
-    /* 只編譯我們自己的程式碼，不掃描頁面其他腳本，避免擴充套件注入造成編譯中斷 */
+    /* 只編譯我們自己的程式碼，並直接執行，避免被頁面其他腳本干擾 */
     (function () {
-      try {
-        var src = document.getElementById('app-code').textContent;
-        var out = Babel.transform(src, { presets: ['react'] }).code;
-        var s = document.createElement('script');
-        s.textContent = out;
-        document.body.appendChild(s);
-      } catch (e) {
-        document.getElementById('root').innerHTML =
-          '<div style="padding:2rem;font-family:sans-serif;color:#5c554e">載入發生錯誤，請重新整理。若持續發生請截圖回報。<br><br>' +
-          (e && e.message ? e.message : e) + '</div>';
-        console.error('App 編譯/執行錯誤:', e);
+      function run() {
+        try {
+          if (typeof Babel === 'undefined' || typeof React === 'undefined' || typeof firebase === 'undefined') {
+            return setTimeout(run, 50);
+          }
+          var src = document.getElementById('app-code').textContent;
+          var out = Babel.transform(src, { presets: ['react'] }).code;
+          (0, eval)(out);
+        } catch (e) {
+          document.getElementById('root').innerHTML =
+            '<div style="padding:2rem;font-family:sans-serif;color:#5c554e">載入發生錯誤，請截圖回報：<br><br>' +
+            (e && e.message ? e.message : e) + '</div>';
+          console.error('App 執行錯誤:', e);
+        }
       }
+      run();
     })();
   </script>
 </body>
