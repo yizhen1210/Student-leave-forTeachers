@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>請假登記表</title>
+
+  <!-- favicon（瀏覽器分頁 / Chrome 新分頁捷徑圖示） -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png" />
+  <link rel="shortcut icon" href="icon-192.png" />
+
+  <!-- PWA 設定 -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#f5f1ea" />
+
+  <!-- iPhone / iPad 加到主畫面：名稱、全螢幕、圖示 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="請假登記表" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
+  <!-- Tailwind (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 字型:芫荽(Google Fonts, display=swap 先顯示畫面再換字,避免空等) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Iansui&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet" />
+  <style>
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #d4c8b8; border-radius: 20px; }
+    html, body { margin: 0; background-color: #f5f1ea; }
+  </style>
+
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect } = React;
+
+    /* ====== 同事版 Firebase 設定（獨立專案，已寫死） ====== */
+    const firebaseConfig = {
+      apiKey: "AIzaSyBdPzv0XKtcbnfcLYQv7P4MkMZeO-aOTXo",
+      authDomain: "student-leave-forteachers.firebaseapp.com",
+      projectId: "student-leave-forteachers",
+      storageBucket: "student-leave-forteachers.firebasestorage.app",
+      messagingSenderId: "489612534386",
+      appId: "1:489612534386:web:38c650eee2bc5948b818eb"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+    /* 每位老師各自獨立：資料綁登入帳號的 UID */
+    const userDocRef = (uid) => db.doc('userData/' + uid);
+
+    /* ====== 圖示（內嵌 SVG，取代 lucide-react） ====== */
+    function Svg({ size = 24, className = '', children }) {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+             className={className}>{children}</svg>
+      );
+    }
+    const Calendar = (p) => <Svg {...p}><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></Svg>;
+    const FileDown = (p) => <Svg {...p}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></Svg>;
+    const Trash2 = (p) => <Svg {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></Svg>;
+    const RotateCcw = (p) => <Svg {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Svg>;
+    const PlusCircle = (p) => <Svg {...p}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></Svg>;
+    const ClipboardList = (p) => <Svg {...p}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></Svg>;
+    const PieChart = (p) => <Svg {...p}><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></Svg>;
+    const Settings = (p) => <Svg {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></Svg>;
+    const ChevronDown = (p) => <Svg {...p}><path d="m6 9 6 6 6-6"/></Svg>;
+    const ChevronUp = (p) => <Svg {...p}><path d="m18 15-6-6-6 6"/></Svg>;
+    const RefreshCcw = (p) => <Svg {...p}><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></Svg>;
+    const BookOpen = (p) => <Svg {...p}><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></Svg>;
+    const Users = (p) => <Svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Svg>;
+    const ArrowUpDown = (p) => <Svg {...p}><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></Svg>;
+    const ArrowUp = (p) => <Svg {...p}><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></Svg>;
+    const ArrowDown = (p) => <Svg {...p}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></Svg>;
+    const LogOut = (p) => <Svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></Svg>;
+
+    function App() {
+      const getTodayString = () => new Date().toISOString().split('T')[0];
+
+      const [user, setUser] = useState(null);
+      const [authReady, setAuthReady] = useState(false);
+      const [isLoaded, setIsLoaded] = useState(false);
+      const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+      const [studentList, setStudentList] = useState("01 陳小明\n02 林小華\n03 王小寶");
+      const [semester, setSemester] = useState("114-2");
+      const [showSettings, setShowSettings] = useState(false);
+      const [leaves, setLeaves] = useState([]);
+      const [dateSortOrder, setDateSortOrder] = useState(null);
+      const [toast, setToast] = useState(null);
+
+      const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 2200);
+      };
+
+      const [formData, setFormData] = useState({
+        startDate: getTodayString(),
+        endDate: getTodayString(),
+        student: '',
+        type: '病假'
+      });
+
+      /* 監聽登入狀態 */
+      useEffect(() => {
+        const unsub = auth.onAuthStateChanged((u) => {
+          setUser(u);
+          setAuthReady(true);
+          if (!u) setIsLoaded(false);
+        });
+        return () => unsub();
+      }, []);
+
+      const handleLogin = async () => {
+        try {
+          await auth.signInWithPopup(googleProvider);
+        } catch (e) {
+          console.error("Login error", e);
+          alert("登入失敗：" + (e && e.message ? e.message : e));
+        }
+      };
+      const handleLogout = () => auth.signOut();
+
+      /* 從雲端讀取（登入者自己的文件） */
+      useEffect(() => {
+        if (!user) return;
+        const unsubscribe = userDocRef(user.uid).onSnapshot((docSnap) => {
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data.leaves !== undefined) setLeaves(data.leaves);
+            if (data.studentList !== undefined) setStudentList(data.studentList);
+            if (data.semester !== undefined) setSemester(data.semester);
+          }
+          setIsLoaded(true);
+        }, (error) => {
+          console.error("Fetch error", error);
+          setIsLoaded(true);
+        });
+        return () => unsubscribe();
+      }, [user]);
+
+      /* 自動備份至雲端 */
+      useEffect(() => {
+        if (!user || !isLoaded) return;
+        userDocRef(user.uid).set({ leaves, studentList, semester }, { merge: true }).catch(console.error);
+      }, [leaves, studentList, semester, user, isLoaded]);
+
+      const students = studentList.split(/\n|,/).map(s => s.trim()).filter(s => s);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!formData.student) { alert('請選擇學生'); return; }
+        const start = new Date(formData.startDate);
+        const end = new Date(formData.endDate);
+        const newRecords = [];
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          newRecords.push({
+            id: Date.now() + Math.random(),
+            date: d.toISOString().split('T')[0],
+            student: formData.student,
+            type: formData.type
+          });
+        }
+        setLeaves([...newRecords, ...leaves]);
+        showToast({ count: newRecords.length, type: formData.type });
+      };
+
+      const handleDelete = (id) => setLeaves(leaves.filter(r => r.id !== id));
+      const handleClearAll = () => setShowClearConfirm(true);
+      const executeClearAll = () => { setLeaves([]); setShowClearConfirm(false); };
+
+      const circledNumbers = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗";
+      const sortStudents = (a, b) => {
+        const getIndex = (name) => {
+          for (let i = 0; i < circledNumbers.length; i++) {
+            if (name.includes(circledNumbers[i])) return i;
+          }
+          return 999;
+        };
+        const indexA = getIndex(a[0]);
+        const indexB = getIndex(b[0]);
+        if (indexA !== indexB) return indexA - indexB;
+        return a[0].localeCompare(b[0]);
+      };
+
+      const studentSummary = leaves.reduce((acc, curr) => {
+        if (!acc[curr.student]) acc[curr.student] = { '病假': 0, '事假': 0, '公假': 0, '喪假': 0, '晚到': 0, '早退': 0, total: 0 };
+        acc[curr.student][curr.type] = (acc[curr.student][curr.type] || 0) + 1;
+        acc[curr.student].total++;
+        return acc;
+      }, {});
+
+      const exportCSV = () => {
+        const headers = ["學生", "病假", "事假", "公假", "喪假", "晚到", "早退", "總計"];
+        const sortedSummary = Object.entries(studentSummary).sort(sortStudents);
+        const rows = sortedSummary.map(([name, stats]) => [
+          name, stats['病假'], stats['事假'], stats['公假'], stats['喪假'], stats['晚到'], stats['早退'], stats.total
+        ]);
+        const csvContent = '\uFEFF' + [headers, ...rows].map(e => e.join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', `班級請假統計_${semester}.csv`);
+        link.click();
+      };
+
+      const getTypeStyle = (type) => {
+        if (type === '病假') return 'bg-[#faecec] text-[#ad7878] border-[#ebd4d4] before:bg-[#ad7878]';
+        if (type === '事假') return 'bg-[#eef4f8] text-[#7a95a8] border-[#cfdee8] before:bg-[#7a95a8]';
+        if (type === '公假') return 'bg-[#edf4ed] text-[#869b88] border-[#d4e0d4] before:bg-[#869b88]';
+        if (type === '喪假') return 'bg-[#f0eee9] text-[#827c73] border-[#dedcd5] before:bg-[#827c73]';
+        if (type === '晚到') return 'bg-[#fcf9e8] text-[#a3914a] border-[#efe8cc] before:bg-[#a3914a]';
+        if (type === '早退') return 'bg-[#fdf2e9] text-[#d68b6d] border-[#f2dccf] before:bg-[#d68b6d]';
+        return 'bg-slate-100 text-slate-600 border-slate-200 before:bg-slate-500';
+      };
+
+      let displayedLeaves = [...leaves];
+      if (dateSortOrder === 'asc') displayedLeaves.sort((a, b) => new Date(a.date) - new Date(b.date));
+      else if (dateSortOrder === 'desc') displayedLeaves.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      const FONT = { fontFamily: "'Iansui', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif" };
+
+      /* 還在確認登入狀態 */
+      if (!authReady) {
+        return (
+          <div className="min-h-[100dvh] bg-[#f5f1ea] flex items-center justify-center" style={FONT}>
+            <div className="text-[#a39584] text-2xl font-bold flex items-center tracking-wider">
+              <RefreshCcw className="animate-spin mr-4" size={32} /> 載入中...
+            </div>
+          </div>
+        );
+      }
+
+      /* 未登入 → 登入畫面 */
+      if (!user) {
+        return (
+          <div className="min-h-[100dvh] bg-[#f5f1ea] flex items-center justify-center p-4" style={FONT}>
+            <div className="bg-white/70 backdrop-blur-xl p-8 md:p-12 rounded-3xl shadow-[0_8px_30px_rgb(166,154,138,0.1)] border border-white/80 max-w-md w-full text-center">
+              <div className="bg-[#a39584] p-5 rounded-2xl text-white inline-flex mb-6"><ClipboardList size={40} /></div>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-[#4a443e] mb-2">學生請假登記系統</h1>
+              <p className="text-[#8c857d] mb-8">請使用授權的 Google 帳號登入</p>
+              <button onClick={handleLogin}
+                className="w-full py-3 md:py-4 bg-[#968875] text-white rounded-2xl font-bold text-lg hover:bg-[#857765] transition-all">
+                使用 Google 登入
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      /* 已登入、資料同步中 */
+      if (!isLoaded) {
+        return (
+          <div className="min-h-[100dvh] bg-[#f5f1ea] flex items-center justify-center" style={FONT}>
+            <div className="text-[#a39584] text-2xl font-bold flex items-center tracking-wider">
+              <RefreshCcw className="animate-spin mr-4" size={32} /> 正在同步雲端資料...
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-[#f5f1ea] text-[#5c554e] p-4 sm:p-6 md:p-10 [padding-top:calc(1rem+env(safe-area-inset-top))] sm:[padding-top:calc(1.5rem+env(safe-area-inset-top))] md:[padding-top:calc(2.5rem+env(safe-area-inset-top))]" style={FONT}>
+          <div className="max-w-7xl mx-auto space-y-8 md:space-y-10">
+            <header className="bg-white/70 backdrop-blur-xl p-6 sm:p-8 md:p-10 rounded-3xl shadow-[0_8px_30px_rgb(166,154,138,0.06)] flex flex-col sm:flex-row items-center text-center sm:text-left gap-4 sm:gap-6 relative">
+              <div className="bg-[#a39584] p-4 sm:p-5 rounded-2xl text-white shrink-0"><ClipboardList size={40} /></div>
+              <div className="flex-1 w-full">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#4a443e]">{semester} 學生請假登記系統</h1>
+                <p className="text-base sm:text-lg md:text-xl text-[#8c857d] mt-2">老師的班級管理小幫手</p>
+              </div>
+              <div className="flex flex-col items-center sm:items-end gap-1 sm:gap-2">
+                <span className="-mt-1 sm:mt-0 text-[#a39584] text-sm md:text-base font-medium tracking-wide">created by 怡臻老師</span>
+                <span className="text-[#a39584] text-sm md:text-base max-sm:truncate max-sm:max-w-[180px]">{user.email}</span>
+                <button onClick={handleLogout}
+                  className="flex items-center gap-1.5 text-sm text-[#8c7e6c] bg-[#f4efe8] hover:bg-[#eaddca] px-3 py-1.5 rounded-xl font-bold transition-all">
+                  <LogOut size={15} /> 登出
+                </button>
+              </div>
+            </header>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-6 md:gap-8">
+              <div className="bg-white/70 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-sm border border-white/80 h-fit">
+                <h2 className="text-xl md:text-2xl font-bold mb-6 md:mb-8 flex items-center"><PlusCircle className="mr-3 shrink-0" /> 新增請假紀錄</h2>
+                <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+                  <select className="w-full p-3 md:p-4 rounded-xl border border-[#e6e2d8] bg-white text-base md:text-lg" value={formData.student} onChange={(e) => setFormData({ ...formData, student: e.target.value })}>
+                    <option value="">選擇學生</option>
+                    {students.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input type="date" className="flex-1 p-3 md:p-4 rounded-xl border border-[#e6e2d8] bg-white text-base md:text-lg min-w-0" value={formData.startDate} onChange={(e) => {
+                      const newStart = e.target.value;
+                      setFormData(prev => ({
+                        ...prev,
+                        startDate: newStart,
+                        endDate: (prev.endDate === prev.startDate || prev.endDate < newStart) ? newStart : prev.endDate
+                      }));
+                    }} />
+                    <input type="date" className="flex-1 p-3 md:p-4 rounded-xl border border-[#e6e2d8] bg-white text-base md:text-lg min-w-0" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {['病假', '事假', '公假', '喪假', '晚到', '早退'].map(t => (
+                      <button type="button" key={t} onClick={() => setFormData({ ...formData, type: t })}
+                        className={`p-2 sm:p-3 rounded-xl text-sm md:text-base font-bold transition-all truncate ${formData.type === t ? 'bg-[#d4c8b8] text-white' : 'bg-[#f4efe8] hover:bg-[#eaddca]'}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="w-full py-3 md:py-4 bg-[#968875] text-white rounded-2xl font-bold text-lg md:text-xl hover:bg-[#857765]">新增紀錄</button>
+                </form>
+              </div>
+
+              <div className="lg:relative">
+                <div className="bg-white/70 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-sm flex flex-col h-[450px] sm:h-[500px] lg:h-auto lg:absolute lg:inset-0">
+                  <h2 className="text-xl md:text-2xl font-bold mb-6 md:mb-8 shrink-0">今日/近期紀錄</h2>
+                  <div className="overflow-auto flex-1 min-h-0 pr-1 md:pr-2 custom-scrollbar">
+                    <table className="w-full min-w-[450px]">
+                      <thead className="sticky top-0 bg-white/95 backdrop-blur-sm z-10">
+                        <tr className="text-[#8c857d] text-left shadow-[0_1px_0_#e6e2d8] text-sm md:text-base">
+                          <th className="p-2 md:p-3 cursor-pointer hover:bg-black/5 transition-colors select-none"
+                            onClick={() => {
+                              if (dateSortOrder === null) setDateSortOrder('desc');
+                              else if (dateSortOrder === 'desc') setDateSortOrder('asc');
+                              else setDateSortOrder(null);
+                            }}>
+                            <div className="flex items-center">
+                              日期
+                              <span className="ml-1 md:ml-2 text-[#a39584]">
+                                {dateSortOrder === null && <ArrowUpDown size={14} className="opacity-40" />}
+                                {dateSortOrder === 'desc' && <ArrowDown size={14} />}
+                                {dateSortOrder === 'asc' && <ArrowUp size={14} />}
+                              </span>
+                            </div>
+                          </th>
+                          <th className="p-2 md:p-3">學生</th>
+                          <th className="p-2 md:p-3">假別</th>
+                          <th className="p-2 md:p-3 text-center">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedLeaves.map(r => (
+                          <tr key={r.id} className="border-b border-[#f2efe9] text-sm md:text-base">
+                            <td className="p-2 md:p-3 whitespace-nowrap">{r.date}</td>
+                            <td className="p-2 md:p-3 font-bold">{r.student}</td>
+                            <td className="p-2 md:p-3">
+                              <span className={`inline-flex items-center px-2 py-1 md:px-3 rounded-full text-xs md:text-sm font-bold border before:content-[''] before:w-1.5 before:h-1.5 md:before:w-2 md:before:h-2 before:rounded-full before:mr-1.5 md:before:mr-2 ${getTypeStyle(r.type)}`}>
+                                {r.type}
+                              </span>
+                            </td>
+                            <td className="p-2 md:p-3 text-center"><button onClick={() => handleDelete(r.id)}><RotateCcw size={16} className="text-[#c4beb6] hover:text-[#ad7878] mx-auto" /></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/70 backdrop-blur-xl p-6 md:p-10 rounded-3xl shadow-sm border border-white/80">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-0 mb-6 md:mb-8">
+                <h2 className="text-xl md:text-2xl font-bold flex items-center shrink-0"><PieChart className="mr-3" /> 完整統計摘要</h2>
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4 w-full md:w-auto">
+                  <button onClick={handleClearAll} className="bg-[#ad7878] text-white w-full sm:w-auto justify-center px-4 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center text-base md:text-lg font-bold hover:bg-[#966666]"><Trash2 size={18} className="mr-2 md:mr-3" /> 清除全部</button>
+                  <button onClick={exportCSV} className="bg-[#968875] text-white w-full sm:w-auto justify-center px-4 md:px-6 py-2.5 md:py-3 rounded-xl flex items-center text-base md:text-lg font-bold hover:bg-[#857765]"><FileDown size={18} className="mr-2 md:mr-3" /> 下載 Excel</button>
+                </div>
+              </div>
+              <div className="overflow-x-auto custom-scrollbar pb-2">
+                <table className="w-full text-base md:text-lg min-w-[700px]">
+                  <thead><tr className="text-[#8c857d]">
+                    <th className="p-3 md:p-4 text-center">學生</th>
+                    <th className="p-3 md:p-4 text-[#ad7878]">病假</th>
+                    <th className="p-3 md:p-4 text-[#7a95a8]">事假</th>
+                    <th className="p-3 md:p-4 text-[#869b88]">公假</th>
+                    <th className="p-3 md:p-4 text-[#827c73]">喪假</th>
+                    <th className="p-3 md:p-4 text-[#a3914a]">晚到</th>
+                    <th className="p-3 md:p-4 text-[#d68b6d]">早退</th>
+                    <th className="p-3 md:p-4 font-black text-[#8c7e6c]">總計</th>
+                  </tr></thead>
+                  <tbody>
+                    {Object.entries(studentSummary).sort(sortStudents).map(([name, stats]) => (
+                      <tr key={name} className="border-t border-[#f2efe9] text-center">
+                        <td className="p-3 md:p-4 text-center font-bold align-middle">{name}</td>
+                        <td className="p-3 md:p-4 text-[#ad7878] font-bold align-middle">{stats['病假']}</td>
+                        <td className="p-3 md:p-4 text-[#7a95a8] font-bold align-middle">{stats['事假']}</td>
+                        <td className="p-3 md:p-4 text-[#869b88] font-bold align-middle">{stats['公假']}</td>
+                        <td className="p-3 md:p-4 text-[#827c73] font-bold align-middle">{stats['喪假']}</td>
+                        <td className="p-3 md:p-4 text-[#a3914a] font-bold align-middle">{stats['晚到']}</td>
+                        <td className="p-3 md:p-4 text-[#d68b6d] font-bold align-middle">{stats['早退']}</td>
+                        <td className="p-3 md:p-4 font-black text-[#8c7e6c] align-middle">{stats.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white/70 backdrop-blur-xl p-6 md:p-9 rounded-3xl shadow-sm border border-white/80">
+              <button className="w-full flex items-center justify-between font-bold text-lg md:text-xl" onClick={() => setShowSettings(!showSettings)}>
+                <span className="flex items-center"><Settings className="mr-3" /> 設定與管理</span>
+                {showSettings ? <ChevronUp /> : <ChevronDown />}
+              </button>
+              {showSettings && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mt-6">
+                  <div>
+                    <label className="block font-bold mb-3 flex items-center text-sm md:text-base"><BookOpen className="mr-2" size={16} /> 設定學年度學期 (例如：114-2)</label>
+                    <input className="w-full p-3 md:p-4 rounded-xl border border-[#e6e2d8] bg-white text-base md:text-lg" value={semester} onChange={(e) => setSemester(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block font-bold mb-3 flex items-center text-sm md:text-base"><Users className="mr-2" size={16} /> 設定學生名單 (換行或逗號分隔)</label>
+                    <textarea className="w-full h-32 p-3 md:p-4 rounded-xl border border-[#e6e2d8] bg-white text-base md:text-lg custom-scrollbar" value={studentList} onChange={(e) => setStudentList(e.target.value)} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {toast && (
+            <div className="fixed top-[calc(1.5rem+env(safe-area-inset-top))] sm:top-6 left-1/2 -translate-x-1/2 z-[60] bg-[#5c554e] text-white px-5 py-3 rounded-2xl shadow-xl text-base md:text-lg font-bold flex items-center gap-3 text-center whitespace-nowrap">
+              <PlusCircle size={22} className="shrink-0" />
+              <div className="flex flex-col sm:flex-row leading-tight">
+                <span>已新增 {toast.count} 筆</span>
+                <span>「{toast.type}」紀錄</span>
+              </div>
+            </div>
+          )}
+
+          {showClearConfirm && (
+            <div className="fixed inset-0 bg-[#4a443e]/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl border border-[#e6e2d8]">
+                <h3 className="text-xl md:text-2xl font-bold text-[#4a443e] mb-3 md:mb-4">清除確認</h3>
+                <p className="text-[#8c857d] mb-6 md:mb-8 text-base md:text-lg">確定要清除所有請假紀錄嗎？此操作無法復原，並會同步刪除雲端資料。</p>
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+                  <button onClick={() => setShowClearConfirm(false)} className="flex-1 py-3 bg-[#f4efe8] text-[#8c7e6c] rounded-xl font-bold text-base md:text-lg hover:bg-[#eaddca] transition-all">取消</button>
+                  <button onClick={executeClearAll} className="flex-1 py-3 bg-[#ad7878] text-white rounded-xl font-bold text-base md:text-lg hover:bg-[#966666] transition-all">確定清除</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
